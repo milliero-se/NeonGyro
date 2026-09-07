@@ -1,6 +1,7 @@
 ﻿using GyroHelpers;
 using HarmonyLib;
 using UnityEngine;
+using System.Runtime.CompilerServices;
 
 namespace NeonGyro.Core.Patches;
 
@@ -9,7 +10,7 @@ internal static class MouseLookPatch
 {
 	[HarmonyPatch("UpdateRotation")]
 	[HarmonyPrefix]
-	static void UpdateRotationPrefix(MouseLook __instance, bool playerAlive, ref float ___rotAmountX, ref float ___rotAmountY, ref float ____accelRamp)
+	static void UpdateRotationPrefix(MouseLook __instance, bool playerAlive, ref float ___rotAmountX, ref float ___rotAmountY, ref float ____accelRamp, ref float ___rotationY)
 	{
 		if (Mod.ControllerManager == null || Mod.Config == null) return; // mod not initialized
 		if (!Mod.Config.GyroEnabled.Value) return; // mod disabled
@@ -40,7 +41,18 @@ internal static class MouseLookPatch
 
 		___rotAmountX -= gyro.Y;
 		___rotAmountY += gyro.X * Mod.Config.GyroSensitivityRatio.Value;
+
+		// camera reset
+
+		// get state associated with this instance
+		ResetState state = States.GetOrCreateValue(__instance);
+		// accumulate into rotationY instead of rotAmountY, which is sometimes inverted
+		// accumulating into rotAmountY also seems to be off by a factor of 2, which baffles me?
+		___rotationY += state.Update(___rotationY, Time.deltaTime);
 	}
+
+	// We need to store state for resetting the camera for each MouseLook instance.
+	static readonly ConditionalWeakTable<MouseLook, ResetState> States = new();
 
 	static Vector2 GetLook(MouseLook instance, ref float accelRamp)
 	{
